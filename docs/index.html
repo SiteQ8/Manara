@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manara: learn cybersecurity by doing</title>
+<meta name="description" content="Short hands on cybersecurity lessons you complete in your browser, each ending with the defensive takeaway. Nothing is uploaded.">
+<link rel="stylesheet" href="app/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <svg class="beacon" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="13" y="12" width="6" height="15" rx="1" fill="#e9edf4"/>
+        <path d="M13 12 L19 12 L18 27 L14 27 Z" fill="#cbd3e0"/>
+        <rect x="12" y="9" width="8" height="4" rx="1" fill="#39d0c8"/>
+        <circle cx="16" cy="7" r="3" fill="#ffc857"/>
+        <path d="M16 7 L30 2 L30 5 Z" fill="#ffc857" opacity="0.55"/>
+        <path d="M16 7 L2 2 L2 5 Z" fill="#ffc857" opacity="0.55"/>
+        <path d="M16 7 L30 9 L30 12 Z" fill="#ffc857" opacity="0.3"/>
+        <path d="M16 7 L2 9 L2 12 Z" fill="#ffc857" opacity="0.3"/>
+      </svg>
+      <h1>Manara</h1><span class="ver" id="ver"></span>
+    </div>
+    <a class="btn" href="https://github.com/SiteQ8/Manara" style="text-decoration:none">GitHub</a>
+  </div>
+  <p class="tag">Learn cybersecurity by doing. Each lesson pairs a short, plain explanation with a small exercise you work through yourself, and ends with the defensive takeaway. Pick one to begin.</p>
+  <div class="safe-note">Everything here is sandboxed and runs entirely in your browser. Nothing you type is uploaded, and there is no real attack tooling or live target anywhere in it. The point is to understand how something works so you can defend against it.</div>
+  <div id="app"></div>
+  <p class="foot">Manara means lighthouse, a guiding light. Built as an open learning tool. <a href="https://github.com/SiteQ8/Manara">Source on GitHub</a>.</p>
+</div>
+<script src="app/lessons.js"></script>
+</body>
+</html>
