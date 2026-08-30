@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "manara"
+version = "0.1.0"
+description = "Learn cybersecurity by doing. Short hands on lessons, each ending with the defensive takeaway."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "SiteQ8" }]
+keywords = ["security", "education", "learning", "cybersecurity", "training", "cli"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Education",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Education",
+  "Topic :: Security",
+]
+
+[project.urls]
+Homepage = "https://github.com/SiteQ8/Manara"
+Repository = "https://github.com/SiteQ8/Manara"
+
+[project.scripts]
+manara = "manara.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["manara*"]
