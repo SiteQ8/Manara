@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import List
 
 from . import (bruteforce, encoding, entropy, hashing, headers, phishing,
-               sessions, sqli, tlscert, traffic)
+               sessions, sqli, tlscert, traffic, xss)
 
 
 @dataclass
@@ -48,6 +48,9 @@ LESSONS: List[Lesson] = [
     Lesson("sqli", "SQL injection, safely",
            "See why building a query from input is dangerous, and why parameters end it.",
            sqli),
+    Lesson("xss", "Cross site scripting",
+           "Watch a comment break into a page and run, then watch escaping turn it into plain text.",
+           xss),
     Lesson("sessions", "Cookies and sessions",
            "A session cookie is a key. Toggle its flags and see which attacks open and close.",
            sessions),

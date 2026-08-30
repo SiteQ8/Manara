@@ -101,6 +101,21 @@ def _demo_sqli(c):
     print(f"  access granted: {c['g']}{r2['granted']}{c['x']}  (input is data, not code)")
 
 
+def _demo_xss(c):
+    from . import xss as X
+    payload = "<script>fetch('/steal?c='+document.cookie)</script>"
+    print(f"A comment box. Someone posts:")
+    print(f"  {c['c']}{payload}{c['x']}\n")
+    unsafe = X.render_unsafe(payload)
+    print(f"  {c['r']}A page that inserts it without escaping would run:{c['x']}")
+    for t in unsafe["triggers"]:
+        print(f"      - {t}")
+    safe = X.render_safe(payload)
+    print(f"\n  {c['g']}A page that escapes it first shows only text:{c['x']}")
+    print(f"      {c['d']}{safe['inserted']}{c['x']}")
+    print(f"      nothing runs, because the markup became characters")
+
+
 def _demo_encoding(c):
     msg = "attack at dawn"
     b = encoding.b64_encode(msg)
@@ -173,9 +188,9 @@ def _demo_traffic(c):
 
 DEMOS = {
     "hashing": _demo_hashing, "strength": _demo_strength, "phish": _demo_phish,
-    "sqli": _demo_sqli, "encoding": _demo_encoding, "headers": _demo_headers,
-    "bruteforce": _demo_bruteforce, "sessions": _demo_sessions, "tls": _demo_tls,
-    "traffic": _demo_traffic,
+    "sqli": _demo_sqli, "xss": _demo_xss, "encoding": _demo_encoding,
+    "headers": _demo_headers, "bruteforce": _demo_bruteforce,
+    "sessions": _demo_sessions, "tls": _demo_tls, "traffic": _demo_traffic,
 }
 
 
@@ -191,6 +206,35 @@ def cmd_learn(lesson_id: str, color: bool) -> int:
     return 0
 
 
+def cmd_quiz(color: bool) -> int:
+    from . import quiz as Q
+    c = _color(color)
+    print(f"\n{c['b']}Manara quiz{c['x']}  ({len(Q.QUESTIONS)} questions, type the number of your answer)\n")
+    answers = []
+    for i, q in enumerate(Q.QUESTIONS, 1):
+        print(f"{c['b']}{i}. {q['q']}{c['x']}")
+        for j, opt in enumerate(q["options"]):
+            print(f"   {c['c']}{j + 1}{c['x']}. {opt}")
+        try:
+            raw = input("   your answer: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n(quiz stopped)")
+            return 0
+        chosen = (int(raw) - 1) if raw.isdigit() else None
+        answers.append(chosen)
+        correct = chosen == q["answer"]
+        if correct:
+            print(f"   {c['g']}correct{c['x']}. {q['why']}\n")
+        else:
+            right = q["options"][q["answer"]]
+            print(f"   {c['r']}not quite{c['x']}. The answer is {c['b']}{right}{c['x']}. {q['why']}\n")
+    graded = Q.grade(answers)
+    pct = round(100 * graded["score"] / graded["total"])
+    col = c['g'] if pct >= 70 else (c['y'] if pct >= 40 else c['r'])
+    print(f"{c['b']}Score: {col}{graded['score']} of {graded['total']} ({pct}%){c['x']}\n")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--no-color", action="store_true", help="Plain text without colors.")
@@ -200,6 +244,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("list", help="List the lessons.", parents=[common])
     lp = sub.add_parser("learn", help="Work through a lesson in the terminal.", parents=[common])
     lp.add_argument("lesson", help="The lesson id, for example hashing.")
+    sub.add_parser("quiz", help="Test your understanding across the lessons.", parents=[common])
     sv = sub.add_parser("serve", help="Open the lessons in a browser.", parents=[common])
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8100)
@@ -218,6 +263,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_server(args.host, args.port, open_browser=args.open)
     if args.command == "learn":
         return cmd_learn(args.lesson, color)
+    if args.command == "quiz":
+        return cmd_quiz(color)
     if args.command == "list" or args.command is None:
         return cmd_list(color)
     return 0

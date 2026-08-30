@@ -15,7 +15,7 @@ Manara is a set of short, hands on lessons. Each one pairs a plain English expla
 
 <br>
 
-<img src="docs/screenshot_phish.png" width="820" alt="The spot the phish lesson analyzing a suspicious link" />
+<img src="docs/screenshot_xss.png" width="820" alt="The cross site scripting lesson showing what a vulnerable page would run" />
 
 </div>
 
@@ -33,10 +33,13 @@ A short path from the fundamentals to the more applied. Your progress is saved i
 4. **Encoding is not encryption.** base64, a Caesar shift, and XOR with a key, each reversed in front of you with no secret at all, so it is clear why none of them keeps anything secret.
 5. **Spot the phish.** Paste a link and find where it really goes. The lesson names the tricks: a brand in the subdomain, a lookalike with a digit for a letter, the text before an @ sign, a raw IP address.
 6. **SQL injection, safely.** A pretend login over a tiny table. Enter the classic injection as the password and watch it leak every user, then switch to a parameterized query and watch the same input become harmless data.
-7. **Cookies and sessions.** A session cookie is a key: whoever holds it is you. Toggle HttpOnly, Secure, and SameSite and see exactly which attack each one opens or closes.
-8. **Security headers.** Toggle each browser security header on an imaginary response and see the protection climb and which attack each one closes off.
-9. **TLS and certificates.** Inspect a certificate the way a browser does. Run the three checks against a valid, expired, wrong host, and self signed certificate, and see why each warning appears.
-10. **Reading traffic.** Spot a port scan in a small connection log by grouping it by source and counting the spread. This is the idea at the heart of NetHawk, done by hand.
+7. **Cross site scripting.** Post a comment to a guestbook and watch a script inside it run in a vulnerable page, then switch on escaping and watch the same comment turn into plain text. The danger is shown safely, never executed.
+8. **Cookies and sessions.** A session cookie is a key: whoever holds it is you. Toggle HttpOnly, Secure, and SameSite and see exactly which attack each one opens or closes.
+9. **Security headers.** Toggle each browser security header on an imaginary response and see the protection climb and which attack each one closes off.
+10. **TLS and certificates.** Inspect a certificate the way a browser does. Run the three checks against a valid, expired, wrong host, and self signed certificate, and see why each warning appears.
+11. **Reading traffic.** Spot a port scan in a small connection log by grouping it by source and counting the spread. This is the idea at the heart of NetHawk, done by hand.
+
+When you have worked through the lessons, there is a **quiz** that checks your understanding across all of them, with an explanation after every answer.
 
 ## Two ways to use it
 
@@ -50,6 +53,7 @@ cd Manara
 python -m manara list
 python -m manara learn hashing
 python -m manara learn traffic
+python -m manara quiz           # test your understanding in the terminal
 python -m manara serve          # opens the browser lessons locally
 ```
 

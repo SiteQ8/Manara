@@ -2,7 +2,7 @@
    Everything runs in the browser; nothing is sent anywhere. */
 (function () {
   "use strict";
-  var VERSION = "0.1.0";
+  var VERSION = "0.2.0";
   function el(tag, cls, html) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -303,6 +303,87 @@
     return { rows: rows, scanners: scanners, threshold: threshold };
   }
 
+  var XSS_TRIGGERS = [
+    [/<script/i, "a <script> block, which runs immediately"],
+    [/on\w+\s*=/i, "an inline event handler such as onerror or onload, which runs on the element"],
+    [/javascript:/i, "a javascript: URL, which runs when followed"],
+    [/<iframe/i, "an injected iframe, which can load hostile content"]
+  ];
+  function escapeHtml(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function xssTriggers(comment) {
+    var hits = [];
+    XSS_TRIGGERS.forEach(function (t) { if (t[0].test(comment)) hits.push(t[1]); });
+    return hits;
+  }
+  function renderUnsafe(comment) {
+    var t = xssTriggers(comment);
+    return { inserted: comment, would_execute: t.length > 0, triggers: t, safe: false };
+  }
+  function renderSafe(comment) {
+    return { inserted: escapeHtml(comment), would_execute: false, triggers: [], safe: true };
+  }
+
+  var QUIZ = [
+    { lesson: "hashing", q: "Why is storing a bare SHA256 of a password still risky?",
+      options: ["It can be decrypted with the right key", "The same password always hashes the same, so common ones can be matched from a precomputed list", "SHA256 is too slow to be practical", "It cannot store long passwords"],
+      answer: 1, why: "Hashes are deterministic, so identical passwords share a hash and a wordlist can be matched against many users at once." },
+    { lesson: "hashing", q: "What does adding a per user salt achieve?",
+      options: ["It encrypts the password", "It makes the hash shorter", "It makes each hash unique, so a precomputed list must be redone for every user", "It removes the need for a slow hash"],
+      answer: 2, why: "A unique salt per user defeats precomputation, though a slow password hash is still needed to make each guess expensive." },
+    { lesson: "strength", q: "Which password is strongest against guessing?",
+      options: ["A short one with symbols like P@ss1!", "A long passphrase of several ordinary words", "A common word with a number on the end", "Anything with a capital letter"],
+      answer: 1, why: "Length adds far more entropy than complexity, so a long passphrase beats a short scramble of symbols." },
+    { lesson: "bruteforce", q: "How does a lockout after a few wrong tries help against brute force?",
+      options: ["It makes the secret longer", "It encrypts the attempts", "It slows the guess rate to a crawl and raises alarms", "It hides the login page"],
+      answer: 2, why: "Rate limiting changes the guesses per second, turning a fast attack into a slow, noisy one." },
+    { lesson: "encoding", q: "Why is base64 not a way to keep something secret?",
+      options: ["It is too short", "Anyone can decode it, since no key is needed", "It only works on text", "It changes every time"],
+      answer: 1, why: "Encoding needs no secret to reverse, so it hides nothing. Only encryption with a key keeps data secret." },
+    { lesson: "phish", q: "In http://paypal.com.secure-login.ru/verify, where does the link really go?",
+      options: ["paypal.com", "secure-login.ru", "verify", "It is safe because it says paypal"],
+      answer: 1, why: "The real domain is the last two labels before the first slash, here secure-login.ru. The brand in front is decoration." },
+    { lesson: "phish", q: "What is the safest habit when a link looks suspicious?",
+      options: ["Click it to check", "Trust it if it uses https", "Do not click; go to the site yourself", "Forward it to a friend first"],
+      answer: 2, why: "https only means encrypted, not trustworthy. When unsure, navigate to the site directly instead of clicking." },
+    { lesson: "sqli", q: "Why does entering ' OR '1'='1 as a password bypass a naive login?",
+      options: ["It guesses the real password", "It closes the string and adds an always true condition, so the query matches every row", "It crashes the database", "It is a known admin backdoor"],
+      answer: 1, why: "The input breaks out of the string and changes the query's logic to something always true." },
+    { lesson: "sqli", q: "What actually stops SQL injection?",
+      options: ["Filtering out bad words", "Parameterized queries that treat input as data, never as query text", "Hiding error messages", "Using a longer password"],
+      answer: 1, why: "Parameters send the query and the values separately, so input can never become part of the command." },
+    { lesson: "xss", q: "What makes cross site scripting possible?",
+      options: ["A weak password", "Input placed into a page without escaping, so markup in it runs", "An expired certificate", "A missing salt"],
+      answer: 1, why: "Unescaped output lets a comment's script tag or event handler become part of the page and execute." },
+    { lesson: "xss", q: "What is the primary fix for cross site scripting?",
+      options: ["Escape output for its context so input is shown as text", "Rename the input fields", "Use a faster server", "Block all HTML forms"],
+      answer: 0, why: "Escaping output turns markup into harmless text. A Content Security Policy and HttpOnly cookies are defense in depth." },
+    { lesson: "sessions", q: "What does the HttpOnly flag on a session cookie prevent?",
+      options: ["The cookie being sent over http", "Page scripts reading the cookie, blocking theft through cross site scripting", "The user logging out", "The cookie expiring"],
+      answer: 1, why: "HttpOnly hides the cookie from JavaScript, so an XSS bug cannot steal the session." },
+    { lesson: "headers", q: "Which header most directly limits where scripts may load from?",
+      options: ["Referrer-Policy", "Content-Security-Policy", "X-Frame-Options", "Strict-Transport-Security"],
+      answer: 1, why: "A Content Security Policy restricts script sources, the strongest header level defense against injected script." },
+    { lesson: "tls", q: "A site's certificate is valid and unexpired but issued for another hostname. What should happen?",
+      options: ["The browser trusts it anyway", "The browser warns, because identity is not proven for this site", "It is fine as long as it is https", "The connection is faster"],
+      answer: 1, why: "A certificate for the wrong name proves nothing about this site, so the browser cannot trust the identity." },
+    { lesson: "traffic", q: "In a connection log, what is the signature of a port scan?",
+      options: ["One source reaching many different ports or hosts in a short span", "A single connection to port 443", "Two users talking to the same server", "A slow download"],
+      answer: 0, why: "A scanner fans out across many ports or hosts. That spread, not any one connection, is the tell." }
+  ];
+  function gradeQuiz(answers) {
+    var correct = 0, results = [];
+    QUIZ.forEach(function (q, i) {
+      var chosen = i < answers.length ? answers[i] : null;
+      var ok = chosen === q.answer;
+      if (ok) correct++;
+      results.push({ lesson: q.lesson, chosen: chosen, answer: q.answer, correct: ok, why: q.why });
+    });
+    return { score: correct, total: QUIZ.length, results: results };
+  }
+
   /* ---- lessons ---- */
   var LESSONS = [
     {
@@ -527,7 +608,49 @@
       }
     },
     {
-      id: "sessions", n: "Lesson 7", title: "Cookies and sessions",
+      id: "xss", n: "Lesson 7", title: "Cross site scripting",
+      summary: "Watch a comment break into a page and run, then watch escaping turn it into plain text.",
+      explain: "Cross site scripting is SQL injection's sibling. There, input broke into a database query; here, input breaks into the HTML of a page. When a site takes something a user typed, a comment, a name, a search term, and drops it into the page without escaping, any markup in it becomes part of the page. A comment containing a script tag or an event handler then runs in every visitor's browser, where it can read their session cookie or act as them. The fix is the same shape as before: treat input as data. Escape it for the place it is going, so a script tag becomes the visible text of a script tag and never executes. A Content Security Policy and an HttpOnly cookie, from the earlier lessons, are the defenses in depth behind that.",
+      takeaway: "Escape output for its context, or use a framework that does it by default, so user input is never treated as markup. Add a Content Security Policy and HttpOnly cookies as defense in depth.",
+      render: function (root) {
+        root.appendChild(el("h4", null, "Post a comment to a guestbook"));
+        root.appendChild(el("p", "hint", "This safely shows what would happen; injected script is described, never run."));
+        var inp = el("textarea"); inp.value = "<script>fetch('/steal?c='+document.cookie)</script>"; root.appendChild(inp);
+        var row = el("div", "row");
+        var mode = el("select");
+        var o1 = el("option", null, "vulnerable: inserts your comment as raw HTML"); o1.value = "vuln";
+        var o2 = el("option", null, "safe: escapes your comment first"); o2.value = "safe";
+        mode.appendChild(o1); mode.appendChild(o2);
+        var samples = el("button", "btn small", "Try an attack payload");
+        var go = el("button", "btn primary small", "Post comment");
+        row.appendChild(mode); row.appendChild(samples); row.appendChild(go); root.appendChild(row);
+        var out = el("div", "out"); root.appendChild(out);
+        samples.onclick = function () { inp.value = "<img src=x onerror=\"fetch('/steal?c='+document.cookie)\">"; };
+        go.onclick = function () {
+          var comment = inp.value;
+          if (mode.value === "safe") {
+            var r = renderSafe(comment);
+            out.innerHTML = "<div class='kv'>the guestbook page now contains, as literal text</div>" +
+              "<div class='hashline'>" + esc(r.inserted) + "</div>" +
+              "<div style='margin-top:8px'><span class='pill good'>nothing runs</span> the markup became characters, so it only displays</div>";
+          } else {
+            var u = renderUnsafe(comment);
+            var h = "<div class='kv'>the page inserted your comment as raw HTML</div><div class='hashline'>" + esc(u.inserted) + "</div>";
+            if (u.would_execute) {
+              h += "<div style='margin:8px 0'><span class='pill bad'>this would run in every visitor's browser</span></div>";
+              u.triggers.forEach(function (t) { h += "<div class='sig danger'><div class='d'>" + esc(t) + "</div></div>"; });
+              h += "<div class='kv' style='margin-top:8px'>with your real session cookie in reach, unless HttpOnly is set</div>";
+            } else {
+              h += "<div style='margin-top:8px'><span class='pill good'>nothing to run</span> this comment has no script or handler in it</div>";
+            }
+            out.innerHTML = h;
+          }
+        };
+        go.onclick();
+      }
+    },
+    {
+      id: "sessions", n: "Lesson 8", title: "Cookies and sessions",
       summary: "A session cookie is a key. Toggle its flags and see which attacks open and close.",
       explain: "After you log in, the server gives your browser a session cookie, a random id that stands in for you on every later request. That is convenient, but it means the cookie is a key: whoever holds it is you, with no password needed. Three flags decide how well that key is guarded. HttpOnly keeps page scripts from reading it, so a cross site scripting bug cannot steal it. Secure keeps it off plain http, so it cannot be sniffed. SameSite keeps it from being sent on requests started by other sites, which stops cross site request forgery. Leaving any of the three off opens a specific and well known attack.",
       takeaway: "Set HttpOnly, Secure, and SameSite on session cookies, and give sessions a short life and a real logout. The cookie is a key, so guard it like one.",
@@ -608,7 +731,7 @@
   ];
 
   /* ---- learning path order and progress ---- */
-  var ORDER = ["hashing", "strength", "bruteforce", "encoding", "phish", "sqli", "sessions", "headers", "tls", "traffic"];
+  var ORDER = ["hashing", "strength", "bruteforce", "encoding", "phish", "sqli", "xss", "sessions", "headers", "tls", "traffic"];
   function ordered() {
     return ORDER.map(function (id) { return LESSONS.filter(function (l) { return l.id === id; })[0]; })
       .filter(Boolean);
@@ -647,10 +770,61 @@
     return wrap;
   }
 
+  function renderQuiz(app) {
+    var back = el("button", "back", "\u2190 all lessons"); back.onclick = showList; app.appendChild(back);
+    app.appendChild(el("h2", null, "Test your understanding"));
+    app.appendChild(el("p", "tag", "One quick pass over the ideas from every lesson. Pick an answer to see whether it is right and why. Nothing is graded anywhere but here on your screen."));
+    var answers = {};
+    var score = el("div", "out"); score.style.margin = "0 0 16px";
+    app.appendChild(score);
+    function updateScore(final) {
+      var answered = Object.keys(answers).length;
+      var correct = 0;
+      Object.keys(answers).forEach(function (i) { if (answers[i] === QUIZ[i].answer) correct++; });
+      var pct = Math.round(100 * correct / QUIZ.length);
+      var pill = final ? "<span class='pill " + (pct >= 70 ? "good" : pct >= 40 ? "warn" : "bad") + "'>" + pct + "%</span> " : "";
+      score.innerHTML = pill + "<b>" + correct + " correct</b> of " + answered + " answered, " + QUIZ.length + " total" +
+        (final ? " &middot; " + (pct >= 70 ? "well done" : "worth another look at a lesson or two") : "");
+    }
+    QUIZ.forEach(function (q, i) {
+      var block = el("div", "lab");
+      block.appendChild(el("div", "kv", "From lesson: " + q.lesson));
+      block.appendChild(el("div", null, "<div style='font-weight:600;margin:4px 0 12px'>" + esc(q.q) + "</div>"));
+      var opts = [];
+      q.options.forEach(function (opt, j) {
+        var b = el("button", "btn"); b.style.display = "block"; b.style.width = "100%";
+        b.style.textAlign = "left"; b.style.marginBottom = "7px";
+        b.innerHTML = esc(opt);
+        b.onclick = function () {
+          if (i in answers) return;
+          answers[i] = j;
+          opts.forEach(function (ob, k) {
+            ob.disabled = true;
+            if (k === q.answer) { ob.style.borderColor = "var(--green)"; ob.style.color = "var(--green)"; }
+            else if (k === j) { ob.style.borderColor = "var(--red)"; ob.style.color = "var(--red)"; }
+          });
+          var note = el("div", "sig " + (j === q.answer ? "note" : "danger"));
+          if (j === q.answer) note.style.borderLeftColor = "var(--green)";
+          note.innerHTML = "<div class='t'>" + (j === q.answer ? "Correct" : "Not quite") + "</div><div class='d'>" + esc(q.why) + "</div>";
+          block.appendChild(note);
+          updateScore(Object.keys(answers).length === QUIZ.length);
+        };
+        opts.push(b); block.appendChild(b);
+      });
+      app.appendChild(block);
+    });
+    var retake = el("button", "btn", "Start over");
+    retake.onclick = function () { render(); };
+    app.appendChild(retake);
+    updateScore(false);
+    window.scrollTo(0, 0);
+  }
+
   function render() {
     var app = document.getElementById("app");
     app.innerHTML = "";
     var id = location.hash.replace(/^#/, "");
+    if (id === "quiz") { renderQuiz(app); return; }
     var list = ordered();
     var idx = ORDER.indexOf(id);
     var lesson = idx >= 0 ? list[idx] : null;
@@ -667,6 +841,14 @@
         grid.appendChild(c);
       });
       app.appendChild(grid);
+      var quizWrap = el("div"); quizWrap.style.marginTop = "18px";
+      var quizBtn = el("button", "btn primary", "Test your understanding \u2192");
+      quizBtn.onclick = function () { location.hash = "quiz"; render(); };
+      quizWrap.appendChild(quizBtn);
+      var qn = el("span", "kv"); qn.style.marginLeft = "10px";
+      qn.innerHTML = QUIZ.length + " questions across all lessons";
+      quizWrap.appendChild(qn);
+      app.appendChild(quizWrap);
       return;
     }
     var back = el("button", "back", "\u2190 all lessons"); back.onclick = showList; app.appendChild(back);
@@ -699,7 +881,9 @@
   window.__MANARA__ = {
     analyzeUrl: analyzeUrl, entropyBits: entropyBits, vulnerableLogin: vulnerableLogin,
     safeLogin: safeLogin, analyzeSession: analyzeSession, validateCert: validateCert,
-    detectPortScan: detectPortScan, CERT_SCENARIOS: CERT_SCENARIOS, CERT_TODAY: CERT_TODAY,
+    detectPortScan: detectPortScan, renderUnsafe: renderUnsafe, renderSafe: renderSafe,
+    escapeHtml: escapeHtml, gradeQuiz: gradeQuiz, QUIZ: QUIZ,
+    CERT_SCENARIOS: CERT_SCENARIOS, CERT_TODAY: CERT_TODAY,
     SAMPLE_LOG: SAMPLE_LOG, LESSONS: LESSONS, ORDER: ORDER
   };
 })();
