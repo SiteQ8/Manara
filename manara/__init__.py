@@ -6,4 +6,4 @@ with a small exercise you work through yourself, and ends with the defensive
 takeaway. Everything is sandboxed and for learning; there is no real attack
 tooling and no live targets.
 """
-__version__ = "0.2.0"
+__version__ = "0.3.0"

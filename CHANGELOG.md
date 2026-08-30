@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+Completes the web attack trio and makes each lesson self checking.
+
+- New lesson, cross site request forgery, the third of the trio after SQL
+  injection and cross site scripting. Watch a hidden form on an attacker's page
+  make your bank transfer money using your own logged in session, then turn on a
+  CSRF token or a SameSite cookie and watch the forged request get refused. It
+  pays off the SameSite flag from the sessions lesson. No real requests are made.
+- Every lesson now ends with a quick check, one or two questions drawn from the
+  quiz bank, so you can test what you just saw without leaving the lesson.
+- The full quiz grows to seventeen questions across all twelve lessons.
+
+Twelve lessons in all. 63 tests pass. Still zero dependencies, still sandboxed
+with no real attack tooling and no live targets.
+
 ## 0.2.0
 
 Adds a keystone lesson and a way to check what you have learned.

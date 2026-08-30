@@ -35,7 +35,7 @@ class TestXss(unittest.TestCase):
 
 class TestQuiz(unittest.TestCase):
     def test_bank_is_well_formed(self):
-        self.assertGreaterEqual(len(quiz.QUESTIONS), 12)
+        self.assertGreaterEqual(len(quiz.QUESTIONS), 14)
         for q in quiz.QUESTIONS:
             self.assertIn(q["lesson"], BY_ID, q["lesson"])
             self.assertGreaterEqual(len(q["options"]), 3)

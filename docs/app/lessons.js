@@ -2,7 +2,7 @@
    Everything runs in the browser; nothing is sent anywhere. */
 (function () {
   "use strict";
-  var VERSION = "0.2.0";
+  var VERSION = "0.3.0";
   function el(tag, cls, html) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -360,6 +360,12 @@
     { lesson: "xss", q: "What is the primary fix for cross site scripting?",
       options: ["Escape output for its context so input is shown as text", "Rename the input fields", "Use a faster server", "Block all HTML forms"],
       answer: 0, why: "Escaping output turns markup into harmless text. A Content Security Policy and HttpOnly cookies are defense in depth." },
+    { lesson: "csrf", q: "How does cross site request forgery make a bank act as you?",
+      options: ["It steals your password", "The browser attaches your session cookie even to a request started by another site", "It reads your screen", "It guesses your session id"],
+      answer: 1, why: "The browser sends your session cookie automatically, so a hidden form on another site can post as you." },
+    { lesson: "csrf", q: "Which pair of defenses stops cross site request forgery?",
+      options: ["A longer password and a captcha", "A secret CSRF token in your forms, and SameSite cookies", "Hiding the transfer button", "Encrypting the database"],
+      answer: 1, why: "A CSRF token cannot be known by the attacker's page, and a SameSite cookie is not sent cross site at all." },
     { lesson: "sessions", q: "What does the HttpOnly flag on a session cookie prevent?",
       options: ["The cookie being sent over http", "Page scripts reading the cookie, blocking theft through cross site scripting", "The user logging out", "The cookie expiring"],
       answer: 1, why: "HttpOnly hides the cookie from JavaScript, so an XSS bug cannot steal the session." },
@@ -382,6 +388,29 @@
       results.push({ lesson: q.lesson, chosen: chosen, answer: q.answer, correct: ok, why: q.why });
     });
     return { score: correct, total: QUIZ.length, results: results };
+  }
+
+  var CSRF_TOKEN = "tok-7f3a9c21";
+  function attemptTransfer(crossSite, token, csrfProtection, sameSiteCookie, loggedIn) {
+    if (loggedIn === undefined) loggedIn = true;
+    var cookieSent = loggedIn && !(crossSite && sameSiteCookie);
+    var authenticated = cookieSent;
+    var tokenOk = (!csrfProtection) || (token === CSRF_TOKEN);
+    var executed = authenticated && tokenOk;
+    var blockedBy = null, explanation;
+    if (executed) {
+      explanation = crossSite
+        ? "The forged request went through. The session cookie rode along automatically and nothing else was checked, so the bank acted as you."
+        : "A normal request from the real site, with the session and the right token.";
+    } else if (!authenticated) {
+      blockedBy = "SameSite cookie";
+      explanation = "The session cookie was marked SameSite, so the browser did not attach it to a request from another site. The server saw no session and refused.";
+    } else {
+      blockedBy = "CSRF token";
+      explanation = "The request reached the server with a session but without the secret token the real forms carry. The attacker's page cannot know it, so the server refused.";
+    }
+    return { cross_site: crossSite, cookie_sent: cookieSent, authenticated: authenticated,
+      token_ok: tokenOk, executed: executed, blocked_by: blockedBy, explanation: explanation };
   }
 
   /* ---- lessons ---- */
@@ -650,7 +679,48 @@
       }
     },
     {
-      id: "sessions", n: "Lesson 8", title: "Cookies and sessions",
+      id: "csrf", n: "Lesson 8", title: "Cross site request forgery",
+      summary: "See how a hidden form on another site can act as you, and the two defenses that stop it.",
+      explain: "Cross site request forgery is the quiet member of the web attack trio. It does not steal your password or inject code. It abuses a convenience: your browser attaches your session cookie to every request bound for a site, even a request started by a different site. So if you are logged in to your bank and then visit an attacker's page, a hidden form there can post a transfer to the bank, and the browser will helpfully include your session. The bank sees a request that looks like it came from you. Two defenses stop it. A CSRF token is a secret the real site puts in its own forms and checks on submit, which the attacker's page cannot know. A SameSite cookie, from the sessions lesson, tells the browser not to send the session on cross site requests at all, so the forged request arrives with no session.",
+      takeaway: "Protect every state changing request with a CSRF token or SameSite cookies, and never let a plain GET change state. If a request can act as the user, make sure it truly came from your own site.",
+      render: function (root) {
+        root.appendChild(el("h4", null, "You are logged in to your bank. An attacker hides a transfer form"));
+        root.appendChild(el("p", "hint", "Toggle the two defenses, then fire the request from each place."));
+        var box = el("div");
+        var state = { csrf: false, samesite: false };
+        [["csrf", "Bank requires a CSRF token on transfers"], ["samesite", "Session cookie is marked SameSite"]].forEach(function (f) {
+          var wrap = el("label", "chk");
+          var cb = el("input"); cb.type = "checkbox";
+          cb.onchange = function () { state[f[0]] = cb.checked; out.innerHTML = ""; };
+          var t = el("div"); t.appendChild(el("div", "t", esc(f[1])));
+          wrap.appendChild(cb); wrap.appendChild(t); box.appendChild(wrap);
+        });
+        root.appendChild(box);
+        var row = el("div", "row");
+        var realBtn = el("button", "btn small", "You click Transfer on the real site");
+        var attackBtn = el("button", "btn primary small", "Attacker's hidden form fires");
+        row.appendChild(realBtn); row.appendChild(attackBtn); root.appendChild(row);
+        var out = el("div", "out"); root.appendChild(out);
+        function show(crossSite) {
+          var token = crossSite ? null : CSRF_TOKEN;
+          var r = attemptTransfer(crossSite, token, state.csrf, state.samesite);
+          var verdict;
+          if (r.executed && r.cross_site) verdict = "<span class='pill bad'>transfer sent, the attack worked</span>";
+          else if (r.executed) verdict = "<span class='pill good'>transfer sent, you meant it</span>";
+          else verdict = "<span class='pill good'>blocked by the " + esc(r.blocked_by) + "</span>";
+          out.innerHTML = "<div style='margin-bottom:8px'>" + verdict + "</div>" +
+            "<div class='kv'>request from " + (crossSite ? "another site" : "the bank's own page") +
+            " &middot; session cookie sent: " + (r.cookie_sent ? "yes" : "no") +
+            " &middot; valid token: " + (r.token_ok ? "yes" : "no") + "</div>" +
+            "<div class='sig " + (r.executed && r.cross_site ? "danger" : "note") + "'" + (!(r.executed && r.cross_site) ? " style='border-left-color:var(--green)'" : "") + "><div class='d'>" + esc(r.explanation) + "</div></div>";
+        }
+        realBtn.onclick = function () { show(false); };
+        attackBtn.onclick = function () { show(true); };
+        show(true);
+      }
+    },
+    {
+      id: "sessions", n: "Lesson 9", title: "Cookies and sessions",
       summary: "A session cookie is a key. Toggle its flags and see which attacks open and close.",
       explain: "After you log in, the server gives your browser a session cookie, a random id that stands in for you on every later request. That is convenient, but it means the cookie is a key: whoever holds it is you, with no password needed. Three flags decide how well that key is guarded. HttpOnly keeps page scripts from reading it, so a cross site scripting bug cannot steal it. Secure keeps it off plain http, so it cannot be sniffed. SameSite keeps it from being sent on requests started by other sites, which stops cross site request forgery. Leaving any of the three off opens a specific and well known attack.",
       takeaway: "Set HttpOnly, Secure, and SameSite on session cookies, and give sessions a short life and a real logout. The cookie is a key, so guard it like one.",
@@ -731,7 +801,7 @@
   ];
 
   /* ---- learning path order and progress ---- */
-  var ORDER = ["hashing", "strength", "bruteforce", "encoding", "phish", "sqli", "xss", "sessions", "headers", "tls", "traffic"];
+  var ORDER = ["hashing", "strength", "bruteforce", "encoding", "phish", "sqli", "xss", "csrf", "sessions", "headers", "tls", "traffic"];
   function ordered() {
     return ORDER.map(function (id) { return LESSONS.filter(function (l) { return l.id === id; })[0]; })
       .filter(Boolean);
@@ -820,6 +890,36 @@
     window.scrollTo(0, 0);
   }
 
+  function quickCheck(lessonId) {
+    var qs = QUIZ.filter(function (q) { return q.lesson === lessonId; });
+    if (!qs.length) return null;
+    var wrap = el("div", "lab");
+    wrap.appendChild(el("h4", null, "Quick check"));
+    qs.forEach(function (q) {
+      wrap.appendChild(el("div", null, "<div style='font-weight:600;margin:6px 0 10px'>" + esc(q.q) + "</div>"));
+      var opts = [];
+      var block = el("div");
+      q.options.forEach(function (opt, j) {
+        var b = el("button", "btn"); b.style.display = "block"; b.style.width = "100%";
+        b.style.textAlign = "left"; b.style.marginBottom = "7px"; b.innerHTML = esc(opt);
+        b.onclick = function () {
+          opts.forEach(function (ob, k) {
+            ob.disabled = true;
+            if (k === q.answer) { ob.style.borderColor = "var(--green)"; ob.style.color = "var(--green)"; }
+            else if (k === j) { ob.style.borderColor = "var(--red)"; ob.style.color = "var(--red)"; }
+          });
+          var note = el("div", "sig " + (j === q.answer ? "note" : "danger"));
+          if (j === q.answer) note.style.borderLeftColor = "var(--green)";
+          note.innerHTML = "<div class='t'>" + (j === q.answer ? "Correct" : "Not quite") + "</div><div class='d'>" + esc(q.why) + "</div>";
+          block.appendChild(note);
+        };
+        opts.push(b); block.appendChild(b);
+      });
+      wrap.appendChild(block);
+    });
+    return wrap;
+  }
+
   function render() {
     var app = document.getElementById("app");
     app.innerHTML = "";
@@ -859,6 +959,8 @@
     app.appendChild(el("div", "explain", esc(lesson.explain)));
     var lab = el("div", "lab"); lesson.render(lab); app.appendChild(lab);
     app.appendChild(el("div", "takeaway", "<b>Takeaway.</b> " + esc(lesson.takeaway)));
+    var qc = quickCheck(lesson.id);
+    if (qc) app.appendChild(qc);
 
     var nav = el("div", "row"); nav.style.marginTop = "18px";
     var doneBtn = el("button", "btn " + (isDone(lesson.id) ? "" : "primary"), isDone(lesson.id) ? "\u2713 done, click to unmark" : "Mark this lesson done");
@@ -883,6 +985,7 @@
     safeLogin: safeLogin, analyzeSession: analyzeSession, validateCert: validateCert,
     detectPortScan: detectPortScan, renderUnsafe: renderUnsafe, renderSafe: renderSafe,
     escapeHtml: escapeHtml, gradeQuiz: gradeQuiz, QUIZ: QUIZ,
+    attemptTransfer: attemptTransfer, CSRF_TOKEN: CSRF_TOKEN,
     CERT_SCENARIOS: CERT_SCENARIOS, CERT_TODAY: CERT_TODAY,
     SAMPLE_LOG: SAMPLE_LOG, LESSONS: LESSONS, ORDER: ORDER
   };
