@@ -214,6 +214,95 @@
     return { width: width, space: space, tries: tries, noLimit: noLimit, withLockout: withLockout };
   }
 
+  function analyzeSession(flags) {
+    var httpOnly = !!flags.HttpOnly, secure = !!flags.Secure, sameSite = !!flags.SameSite;
+    var risks = [], safe = [];
+    (httpOnly ? safe : risks).push(httpOnly
+      ? { title: "Hidden from page scripts", detail: "HttpOnly is set, so page scripts cannot read the cookie, which blocks theft through cross site scripting." }
+      : { title: "Readable by page scripts", detail: "Without HttpOnly, any script on the page can read the cookie. A single cross site scripting bug then hands the whole session to an attacker." });
+    (secure ? safe : risks).push(secure
+      ? { title: "Sent only over https", detail: "Secure is set, so the cookie is only ever sent over https and cannot be sniffed in the clear." }
+      : { title: "Sent over plain http", detail: "Without Secure, the cookie rides along on any plain http request, where anyone on the network path can read it." });
+    (sameSite ? safe : risks).push(sameSite
+      ? { title: "Held back on cross site requests", detail: "SameSite is set, so the cookie is not sent on requests started by other sites, which blocks cross site request forgery." }
+      : { title: "Sent on cross site requests", detail: "Without SameSite, the browser attaches the cookie even to requests started by another site, which is what makes cross site request forgery work." });
+    return { risks: risks, safe: safe, exposure: risks.length, protected: safe.length };
+  }
+
+  var TRUSTED_CAS = ["Example Trust CA", "Global Root CA", "Lets Encrypt Authority"];
+  function hostMatches(pattern, hostname) {
+    pattern = pattern.toLowerCase(); hostname = hostname.toLowerCase();
+    if (pattern === hostname) return true;
+    if (pattern.indexOf("*.") === 0) {
+      var base = pattern.slice(2), parts = hostname.split(/\.(.+)/);
+      return parts.length >= 2 && parts[1] === base;
+    }
+    return false;
+  }
+  function validateCert(cert, hostname, today) {
+    var checks = [];
+    var notExpired = cert.valid_from <= today && today <= cert.valid_to;
+    checks.push({ name: "Within its validity dates", ok: notExpired,
+      note: notExpired ? "Valid from " + cert.valid_from + " to " + cert.valid_to + "."
+        : "Today is " + today + ", outside " + cert.valid_from + " to " + cert.valid_to + ". An expired certificate is no longer trusted." });
+    var hostOk = hostMatches(cert.subject, hostname);
+    checks.push({ name: "Issued for this hostname", ok: hostOk,
+      note: hostOk ? "The certificate names " + cert.subject + ", which matches " + hostname + "."
+        : "The certificate names " + cert.subject + ", but you connected to " + hostname + ". A certificate for the wrong name proves nothing about this site." });
+    var trustedIssuer = (!cert.self_signed) && TRUSTED_CAS.indexOf(cert.issuer) >= 0;
+    var issuerNote = cert.self_signed ? "The certificate signed itself. Anyone can make one, so it proves no independent identity."
+      : trustedIssuer ? "Signed by " + cert.issuer + ", a trusted authority."
+      : "Signed by " + cert.issuer + ", which is not a trusted authority, so the chain of trust is broken.";
+    checks.push({ name: "Signed by a trusted authority", ok: trustedIssuer, note: issuerNote });
+    return { hostname: hostname, subject: cert.subject, checks: checks, trusted: checks.every(function (c) { return c.ok; }) };
+  }
+  var CERT_SCENARIOS = {
+    valid: { label: "A normal, valid certificate", hostname: "shop.example.com",
+      cert: { subject: "shop.example.com", issuer: "Lets Encrypt Authority", valid_from: "2025-01-01", valid_to: "2026-06-01", self_signed: false } },
+    expired: { label: "An expired certificate", hostname: "shop.example.com",
+      cert: { subject: "shop.example.com", issuer: "Lets Encrypt Authority", valid_from: "2023-01-01", valid_to: "2024-01-01", self_signed: false } },
+    wrong_host: { label: "A certificate for the wrong site", hostname: "shop.example.com",
+      cert: { subject: "other-site.com", issuer: "Global Root CA", valid_from: "2025-01-01", valid_to: "2026-06-01", self_signed: false } },
+    self_signed: { label: "A self signed certificate", hostname: "shop.example.com",
+      cert: { subject: "shop.example.com", issuer: "shop.example.com", valid_from: "2025-01-01", valid_to: "2026-06-01", self_signed: true } }
+  };
+  var CERT_TODAY = "2025-09-01";
+
+  var SAMPLE_LOG = [
+    ["10.0.0.5", "10.0.0.20", 443], ["10.0.0.5", "10.0.0.20", 443],
+    ["10.0.0.7", "10.0.0.20", 80], ["10.0.0.7", "10.0.0.21", 443],
+    ["10.0.0.9", "10.0.0.20", 443]
+  ];
+  [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3306, 3389, 5432, 8080, 8443].forEach(function (p) {
+    SAMPLE_LOG.push(["10.0.0.66", "10.0.0.20", p]);
+  });
+  SAMPLE_LOG.push(["10.0.0.8", "10.0.0.21", 443]);
+  function summarizeLog(log) {
+    var by = {};
+    log.forEach(function (r) {
+      var e = by[r[0]] || (by[r[0]] = { source: r[0], ports: {}, hosts: {}, connections: 0 });
+      e.ports[r[2]] = 1; e.hosts[r[1]] = 1; e.connections++;
+    });
+    var rows = Object.keys(by).map(function (k) {
+      var e = by[k];
+      return { source: e.source, distinct_ports: Object.keys(e.ports).length,
+        distinct_hosts: Object.keys(e.hosts).length, connections: e.connections,
+        ports: Object.keys(e.ports).map(Number).sort(function (a, b) { return a - b; }) };
+    });
+    rows.sort(function (a, b) { return b.distinct_ports - a.distinct_ports; });
+    return rows;
+  }
+  function detectPortScan(log, threshold) {
+    threshold = threshold || 15;
+    var rows = summarizeLog(log), scanners = [];
+    rows.forEach(function (r) {
+      if (r.distinct_ports >= threshold)
+        scanners.push({ source: r.source, distinct_ports: r.distinct_ports,
+          target: r.distinct_hosts === 1 ? "a single host" : null, sample_ports: r.ports.slice(0, 12) });
+    });
+    return { rows: rows, scanners: scanners, threshold: threshold };
+  }
+
   /* ---- lessons ---- */
   var LESSONS = [
     {
@@ -436,26 +525,142 @@
         };
         go.onclick();
       }
+    },
+    {
+      id: "sessions", n: "Lesson 7", title: "Cookies and sessions",
+      summary: "A session cookie is a key. Toggle its flags and see which attacks open and close.",
+      explain: "After you log in, the server gives your browser a session cookie, a random id that stands in for you on every later request. That is convenient, but it means the cookie is a key: whoever holds it is you, with no password needed. Three flags decide how well that key is guarded. HttpOnly keeps page scripts from reading it, so a cross site scripting bug cannot steal it. Secure keeps it off plain http, so it cannot be sniffed. SameSite keeps it from being sent on requests started by other sites, which stops cross site request forgery. Leaving any of the three off opens a specific and well known attack.",
+      takeaway: "Set HttpOnly, Secure, and SameSite on session cookies, and give sessions a short life and a real logout. The cookie is a key, so guard it like one.",
+      render: function (root) {
+        root.appendChild(el("h4", null, "A session cookie, and the flags that guard it"));
+        var sid = "";
+        for (var i = 0; i < 32; i++) sid += "0123456789abcdef"[Math.floor(Math.random() * 16)];
+        root.appendChild(el("div", "hashline", "session=" + sid));
+        var box = el("div"); root.appendChild(box);
+        var state = { HttpOnly: false, Secure: false, SameSite: false };
+        ["HttpOnly", "Secure", "SameSite"].forEach(function (name) {
+          var wrap = el("label", "chk");
+          var cb = el("input"); cb.type = "checkbox";
+          cb.onchange = function () { state[name] = cb.checked; refresh(); };
+          var t = el("div"); t.appendChild(el("div", "t", "<b class='mono'>" + name + "</b>"));
+          wrap.appendChild(cb); wrap.appendChild(t); box.appendChild(wrap);
+        });
+        var out = el("div", "out"); root.appendChild(out);
+        function refresh() {
+          var r = analyzeSession(state);
+          var h = "<div><span class='pill " + (r.exposure ? "bad" : "good") + "'>" + r.exposure + " of 3 attacks open</span></div>";
+          r.risks.forEach(function (s) { h += "<div class='sig danger'><div class='t'>" + esc(s.title) + "</div><div class='d'>" + esc(s.detail) + "</div></div>"; });
+          r.safe.forEach(function (s) { h += "<div class='sig note' style='border-left-color:var(--green)'><div class='t'>" + esc(s.title) + "</div><div class='d'>" + esc(s.detail) + "</div></div>"; });
+          out.innerHTML = h;
+        }
+        refresh();
+      }
+    },
+    {
+      id: "tls", n: "Lesson 9", title: "TLS and certificates",
+      summary: "See the three checks a browser runs on a certificate, and why each warning appears.",
+      explain: "When you connect over https, the site sends a certificate that does two jobs. It carries the key used to encrypt the connection, and it proves the site is who it claims to be. Your browser accepts it only if three things hold. The certificate must be within its validity dates, it must be issued for the exact hostname you visited, and it must be signed by an authority your browser already trusts, forming an unbroken chain. If any check fails, the encryption might still work, but the identity is unproven, and that is exactly what the browser warning is telling you. A self signed certificate fails the last check because anyone can make one.",
+      takeaway: "A certificate warning means identity could not be proven, so treat the site as untrusted and do not click through on anything that matters. Encryption without a verified identity is encryption with a stranger.",
+      render: function (root) {
+        root.appendChild(el("h4", null, "Inspect a certificate the way a browser does"));
+        var row = el("div", "row");
+        var sel = el("select");
+        Object.keys(CERT_SCENARIOS).forEach(function (k) { var o = el("option", null, CERT_SCENARIOS[k].label); o.value = k; sel.appendChild(o); });
+        row.appendChild(sel); root.appendChild(row);
+        var out = el("div", "out"); root.appendChild(out);
+        function refresh() {
+          var sc = CERT_SCENARIOS[sel.value], r = validateCert(sc.cert, sc.hostname, CERT_TODAY);
+          var h = "<div class='kv'>you connected to <b class='mono'>" + esc(sc.hostname) + "</b>, the certificate names <b class='mono'>" + esc(sc.cert.subject) + "</b>, issuer " + esc(sc.cert.issuer) + "</div>";
+          h += "<div style='margin:10px 0'><span class='pill " + (r.trusted ? "good" : "bad") + "'>" + (r.trusted ? "trusted, no warning" : "browser shows a warning") + "</span></div>";
+          r.checks.forEach(function (c) {
+            h += "<div class='sig " + (c.ok ? "note" : "danger") + "'" + (c.ok ? " style='border-left-color:var(--green)'" : "") + "><div class='t'>" + (c.ok ? "\u2713 " : "\u2717 ") + esc(c.name) + "</div><div class='d'>" + esc(c.note) + "</div></div>";
+          });
+          out.innerHTML = h;
+        }
+        sel.onchange = refresh; refresh();
+      }
+    },
+    {
+      id: "traffic", n: "Lesson 10", title: "Reading traffic",
+      summary: "Spot a port scan in a connection log by hand, the idea at the heart of NetHawk.",
+      explain: "Most defensive work starts with reading traffic, and the most basic pattern to recognize is a port scan. Normal clients talk to a service or two on their usual ports. A scanner does the opposite: a single source reaches for a long list of ports on a target, or the same port across many hosts, probing to learn what is open. You do not need fancy tools to see it, only to group the log by source and count how many distinct ports or hosts each one touched. One address with a count far above the rest is the scanner, and that spread is its fingerprint. This is exactly what a tool like NetHawk automates over a real capture.",
+      takeaway: "Watch for one source fanning out across many ports or many hosts. That spread, not any single connection, is the signature of a scan. Group by source, count the spread, and the outlier stands out.",
+      render: function (root) {
+        root.appendChild(el("h4", null, "A connection log. Who is scanning?"));
+        root.appendChild(el("p", "hint", "Each row is one source reaching one destination on one port. Group by source and count."));
+        var go = el("button", "btn primary small", "Group by source and count the spread"); root.appendChild(go);
+        var out = el("div", "out"); root.appendChild(out);
+        go.onclick = function () {
+          var res = detectPortScan(SAMPLE_LOG);
+          var h = "<div class='kv'>" + SAMPLE_LOG.length + " connections, grouped by source</div>";
+          res.rows.forEach(function (r) {
+            var scanning = r.distinct_ports >= res.threshold;
+            h += "<div class='sig " + (scanning ? "danger" : "note") + "'" + (!scanning ? " style='border-left-color:var(--line)'" : "") + ">" +
+              "<div class='t'><span class='mono'>" + esc(r.source) + "</span> &middot; " + r.distinct_ports + " distinct ports, " + r.distinct_hosts + " host" + (r.distinct_hosts > 1 ? "s" : "") +
+              (scanning ? " &nbsp;<span class='pill bad'>port scan</span>" : "") + "</div>" +
+              (scanning ? "<div class='d'>reached ports " + r.ports.slice(0, 12).join(", ") + " on one host, a classic vertical scan</div>" : "") + "</div>";
+          });
+          out.innerHTML = h;
+        };
+        go.onclick();
+      }
     }
   ];
 
-  /* ---- app shell ---- */
-  function showList() {
-    location.hash = "";
-    render();
+  /* ---- learning path order and progress ---- */
+  var ORDER = ["hashing", "strength", "bruteforce", "encoding", "phish", "sqli", "sessions", "headers", "tls", "traffic"];
+  function ordered() {
+    return ORDER.map(function (id) { return LESSONS.filter(function (l) { return l.id === id; })[0]; })
+      .filter(Boolean);
   }
+  var PKEY = "manara_progress_v1";
+  function loadProgress() {
+    try { return JSON.parse(localStorage.getItem(PKEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveProgress(p) {
+    try { localStorage.setItem(PKEY, JSON.stringify(p)); } catch (e) {}
+  }
+  function isDone(id) { return !!loadProgress()[id]; }
+  function setDone(id, done) {
+    var p = loadProgress();
+    if (done) p[id] = true; else delete p[id];
+    saveProgress(p);
+  }
+  function doneCount() {
+    var p = loadProgress(), n = 0;
+    ORDER.forEach(function (id) { if (p[id]) n++; });
+    return n;
+  }
+
+  /* ---- app shell ---- */
+  function showList() { location.hash = ""; render(); }
   function showLesson(id) { location.hash = id; render(); }
+
+  function progressBar() {
+    var done = doneCount(), total = ORDER.length, pct = Math.round(100 * done / total);
+    var wrap = el("div");
+    wrap.style.margin = "0 0 20px";
+    var line = el("div", "kv", "<b style='color:var(--text)'>" + done + " of " + total + "</b> lessons done");
+    var meter = el("div", "meter"); var bar = el("span");
+    bar.style.width = pct + "%"; bar.style.background = "var(--teal)"; meter.appendChild(bar);
+    wrap.appendChild(line); wrap.appendChild(meter);
+    return wrap;
+  }
 
   function render() {
     var app = document.getElementById("app");
     app.innerHTML = "";
     var id = location.hash.replace(/^#/, "");
-    var lesson = LESSONS.filter(function (l) { return l.id === id; })[0];
+    var list = ordered();
+    var idx = ORDER.indexOf(id);
+    var lesson = idx >= 0 ? list[idx] : null;
     if (!lesson) {
+      app.appendChild(progressBar());
       var grid = el("div", "grid");
-      LESSONS.forEach(function (l) {
+      list.forEach(function (l, i) {
+        var done = isDone(l.id);
         var c = el("div", "card");
-        c.appendChild(el("div", "n", esc(l.n)));
+        c.appendChild(el("div", "n", "Lesson " + (i + 1) + (done ? " &nbsp;<span class='pill good' style='padding:1px 8px'>done</span>" : "")));
         c.appendChild(el("h3", null, esc(l.title)));
         c.appendChild(el("p", null, esc(l.summary)));
         c.onclick = function () { showLesson(l.id); };
@@ -466,12 +671,23 @@
     }
     var back = el("button", "back", "\u2190 all lessons"); back.onclick = showList; app.appendChild(back);
     var head = el("div", "lesson-head");
-    head.appendChild(el("div", "card-n", "<span class='pill' style='background:rgba(255,200,87,.16);color:var(--beam)'>" + esc(lesson.n) + "</span>"));
+    head.appendChild(el("div", "card-n", "<span class='pill' style='background:rgba(255,200,87,.16);color:var(--beam)'>Lesson " + (idx + 1) + " of " + ORDER.length + "</span>"));
     head.appendChild(el("h2", null, esc(lesson.title)));
     app.appendChild(head);
     app.appendChild(el("div", "explain", esc(lesson.explain)));
     var lab = el("div", "lab"); lesson.render(lab); app.appendChild(lab);
     app.appendChild(el("div", "takeaway", "<b>Takeaway.</b> " + esc(lesson.takeaway)));
+
+    var nav = el("div", "row"); nav.style.marginTop = "18px";
+    var doneBtn = el("button", "btn " + (isDone(lesson.id) ? "" : "primary"), isDone(lesson.id) ? "\u2713 done, click to unmark" : "Mark this lesson done");
+    doneBtn.onclick = function () { setDone(lesson.id, !isDone(lesson.id)); render(); };
+    nav.appendChild(doneBtn);
+    if (idx + 1 < ORDER.length) {
+      var next = el("button", "btn", "Next: " + list[idx + 1].title + " \u2192");
+      next.onclick = function () { showLesson(ORDER[idx + 1]); };
+      nav.appendChild(next);
+    }
+    app.appendChild(nav);
     window.scrollTo(0, 0);
   }
 
@@ -480,5 +696,10 @@
     window.addEventListener("hashchange", render);
     render();
   });
-  window.__MANARA__ = { analyzeUrl: analyzeUrl, entropyBits: entropyBits, vulnerableLogin: vulnerableLogin, safeLogin: safeLogin, LESSONS: LESSONS };
+  window.__MANARA__ = {
+    analyzeUrl: analyzeUrl, entropyBits: entropyBits, vulnerableLogin: vulnerableLogin,
+    safeLogin: safeLogin, analyzeSession: analyzeSession, validateCert: validateCert,
+    detectPortScan: detectPortScan, CERT_SCENARIOS: CERT_SCENARIOS, CERT_TODAY: CERT_TODAY,
+    SAMPLE_LOG: SAMPLE_LOG, LESSONS: LESSONS, ORDER: ORDER
+  };
 })();

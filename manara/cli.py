@@ -133,10 +133,49 @@ def _demo_bruteforce(c):
     print(f"  With a lockout every 3 tries for 5 minutes: {c['g']}about {lock_days:.0f} days{c['x']}")
 
 
+def _demo_sessions(c):
+    from . import sessions as S
+    sid = S.new_session_id()
+    print(f"  A session cookie holds a random id like {c['d']}{sid}{c['x']}")
+    print(f"  Whoever holds it is you, so its flags decide how exposed it is.\n")
+    bare = S.analyze({})
+    print(f"  {c['r']}With no flags set ({bare['exposure']} risks open):{c['x']}")
+    for risk in bare["risks"]:
+        print(f"      - {risk['title']}")
+    good = S.analyze({"HttpOnly": True, "Secure": True, "SameSite": True})
+    print(f"\n  {c['g']}With HttpOnly, Secure, and SameSite all set:{c['x']} {good['protected']} of 3 attacks closed.")
+
+
+def _demo_tls(c):
+    from . import tlscert as T
+    for key in ["valid", "expired", "wrong_host", "self_signed"]:
+        sc = T.SCENARIOS[key]
+        r = T.validate(sc["cert"], sc["hostname"], T.TODAY)
+        col = c['g'] if r["trusted"] else c['r']
+        verdict = "trusted" if r["trusted"] else "warning shown"
+        print(f"  {col}{verdict:>13}{c['x']}  {sc['label']}")
+        for chk in r["checks"]:
+            if not chk["ok"]:
+                print(f"                 {c['d']}x {chk['name']}{c['x']}")
+
+
+def _demo_traffic(c):
+    from . import traffic as TR
+    res = TR.detect_port_scan(TR.SAMPLE_LOG)
+    print(f"  Reading a {len(TR.SAMPLE_LOG)} line connection log, grouped by source:\n")
+    for row in res["rows"][:6]:
+        mark = c['r'] + " <- scanning" + c['x'] if row["distinct_ports"] >= res["threshold"] else ""
+        print(f"      {row['source']:<12} {row['distinct_ports']:>2} distinct ports{mark}")
+    for s in res["scanners"]:
+        print(f"\n  {c['r']}Port scan from {s['source']}{c['x']}: {s['distinct_ports']} ports on {s['target']}")
+        print(f"      sample ports {c['d']}{s['sample_ports']}{c['x']}")
+
+
 DEMOS = {
     "hashing": _demo_hashing, "strength": _demo_strength, "phish": _demo_phish,
     "sqli": _demo_sqli, "encoding": _demo_encoding, "headers": _demo_headers,
-    "bruteforce": _demo_bruteforce,
+    "bruteforce": _demo_bruteforce, "sessions": _demo_sessions, "tls": _demo_tls,
+    "traffic": _demo_traffic,
 }
 
 
