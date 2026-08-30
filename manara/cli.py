@@ -116,6 +116,22 @@ def _demo_xss(c):
     print(f"      nothing runs, because the markup became characters")
 
 
+def _demo_csrf(c):
+    from . import csrf as CF
+    print(f"  You are logged in to your bank. An attacker's page hides a transfer form.\n")
+    for key in ["legit", "attack_open", "attack_vs_token", "attack_vs_samesite"]:
+        sc = CF.SCENARIOS[key]
+        r = CF.attempt_transfer(**sc["args"])
+        if r["executed"] and r["cross_site"]:
+            tag = c['r'] + "transfer sent (attack worked)" + c['x']
+        elif r["executed"]:
+            tag = c['g'] + "transfer sent (you meant it)" + c['x']
+        else:
+            tag = c['g'] + "blocked by " + r["blocked_by"] + c['x']
+        print(f"  {tag}")
+        print(f"      {c['d']}{sc['label']}{c['x']}")
+
+
 def _demo_encoding(c):
     msg = "attack at dawn"
     b = encoding.b64_encode(msg)
@@ -188,7 +204,7 @@ def _demo_traffic(c):
 
 DEMOS = {
     "hashing": _demo_hashing, "strength": _demo_strength, "phish": _demo_phish,
-    "sqli": _demo_sqli, "xss": _demo_xss, "encoding": _demo_encoding,
+    "sqli": _demo_sqli, "xss": _demo_xss, "csrf": _demo_csrf, "encoding": _demo_encoding,
     "headers": _demo_headers, "bruteforce": _demo_bruteforce,
     "sessions": _demo_sessions, "tls": _demo_tls, "traffic": _demo_traffic,
 }

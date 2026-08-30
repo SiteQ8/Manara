@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from . import (bruteforce, encoding, entropy, hashing, headers, phishing,
+from . import (bruteforce, csrf, encoding, entropy, hashing, headers, phishing,
                sessions, sqli, tlscert, traffic, xss)
 
 
@@ -51,6 +51,9 @@ LESSONS: List[Lesson] = [
     Lesson("xss", "Cross site scripting",
            "Watch a comment break into a page and run, then watch escaping turn it into plain text.",
            xss),
+    Lesson("csrf", "Cross site request forgery",
+           "See how a hidden form on another site can act as you, and the two defenses that stop it.",
+           csrf),
     Lesson("sessions", "Cookies and sessions",
            "A session cookie is a key. Toggle its flags and see which attacks open and close.",
            sessions),

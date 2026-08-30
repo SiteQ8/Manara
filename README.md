@@ -34,12 +34,13 @@ A short path from the fundamentals to the more applied. Your progress is saved i
 5. **Spot the phish.** Paste a link and find where it really goes. The lesson names the tricks: a brand in the subdomain, a lookalike with a digit for a letter, the text before an @ sign, a raw IP address.
 6. **SQL injection, safely.** A pretend login over a tiny table. Enter the classic injection as the password and watch it leak every user, then switch to a parameterized query and watch the same input become harmless data.
 7. **Cross site scripting.** Post a comment to a guestbook and watch a script inside it run in a vulnerable page, then switch on escaping and watch the same comment turn into plain text. The danger is shown safely, never executed.
-8. **Cookies and sessions.** A session cookie is a key: whoever holds it is you. Toggle HttpOnly, Secure, and SameSite and see exactly which attack each one opens or closes.
-9. **Security headers.** Toggle each browser security header on an imaginary response and see the protection climb and which attack each one closes off.
-10. **TLS and certificates.** Inspect a certificate the way a browser does. Run the three checks against a valid, expired, wrong host, and self signed certificate, and see why each warning appears.
-11. **Reading traffic.** Spot a port scan in a small connection log by grouping it by source and counting the spread. This is the idea at the heart of NetHawk, done by hand.
+8. **Cross site request forgery.** Watch a hidden form on an attacker's page make your bank transfer money using your own logged in session, then turn on a CSRF token or a SameSite cookie and watch the forged request get refused. The third of the web attack trio.
+9. **Cookies and sessions.** A session cookie is a key: whoever holds it is you. Toggle HttpOnly, Secure, and SameSite and see exactly which attack each one opens or closes.
+10. **Security headers.** Toggle each browser security header on an imaginary response and see the protection climb and which attack each one closes off.
+11. **TLS and certificates.** Inspect a certificate the way a browser does. Run the three checks against a valid, expired, wrong host, and self signed certificate, and see why each warning appears.
+12. **Reading traffic.** Spot a port scan in a small connection log by grouping it by source and counting the spread. This is the idea at the heart of NetHawk, done by hand.
 
-When you have worked through the lessons, there is a **quiz** that checks your understanding across all of them, with an explanation after every answer.
+Every lesson ends with a quick check, one or two questions on what you just saw. When you have worked through them all, a full **quiz** tests your understanding across every lesson, with an explanation after each answer.
 
 ## Two ways to use it
 
