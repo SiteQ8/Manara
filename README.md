@@ -25,17 +25,22 @@ Everything in Manara is sandboxed and runs entirely in your browser or on your o
 
 ## The lessons
 
+A short path from the fundamentals to the more applied. Your progress is saved in your browser as you go, so you can work through it over time.
+
 1. **Hashing and passwords.** Type a password, watch it hash, and see that two identical passwords hash the same way. Then run a wordlist against it and watch a common password fall in a few tries, add a salt, and watch the same wordlist come up empty.
 2. **How strong is a password.** Build a password and see its entropy in bits and an honest estimate of time to crack, and watch a long passphrase beat a short scramble of symbols.
-3. **Spot the phish.** Paste a link and find where it really goes. The lesson names the tricks: a brand in the subdomain, a lookalike with a digit for a letter, the text before an @ sign, a raw IP address.
-4. **SQL injection, safely.** A pretend login over a tiny table. Enter the classic injection as the password and watch it leak every user, then switch to a parameterized query and watch the same input become harmless data.
-5. **Encoding is not encryption.** base64, a Caesar shift, and XOR with a key, each reversed in front of you with no secret at all, so it is clear why none of them keeps anything secret.
-6. **Security headers.** Toggle each browser security header on an imaginary response and see the protection climb and which attack each one closes off.
-7. **Brute force and rate limiting.** Pick a PIN and let an attacker guess it, then turn on a lockout and watch seconds become years.
+3. **Brute force and rate limiting.** Pick a PIN and let an attacker guess it, then turn on a lockout and watch seconds become years.
+4. **Encoding is not encryption.** base64, a Caesar shift, and XOR with a key, each reversed in front of you with no secret at all, so it is clear why none of them keeps anything secret.
+5. **Spot the phish.** Paste a link and find where it really goes. The lesson names the tricks: a brand in the subdomain, a lookalike with a digit for a letter, the text before an @ sign, a raw IP address.
+6. **SQL injection, safely.** A pretend login over a tiny table. Enter the classic injection as the password and watch it leak every user, then switch to a parameterized query and watch the same input become harmless data.
+7. **Cookies and sessions.** A session cookie is a key: whoever holds it is you. Toggle HttpOnly, Secure, and SameSite and see exactly which attack each one opens or closes.
+8. **Security headers.** Toggle each browser security header on an imaginary response and see the protection climb and which attack each one closes off.
+9. **TLS and certificates.** Inspect a certificate the way a browser does. Run the three checks against a valid, expired, wrong host, and self signed certificate, and see why each warning appears.
+10. **Reading traffic.** Spot a port scan in a small connection log by grouping it by source and counting the spread. This is the idea at the heart of NetHawk, done by hand.
 
 ## Two ways to use it
 
-**In the browser.** Open [the live demo](https://siteq8.github.io/Manara/) and pick a lesson. Everything runs client side.
+**In the browser.** Open [the live demo](https://siteq8.github.io/Manara/) and pick a lesson. Everything runs client side, and your progress is remembered on your device.
 
 **In the terminal.** The same lessons run offline as a zero dependency Python tool:
 
@@ -44,6 +49,7 @@ git clone https://github.com/SiteQ8/Manara.git
 cd Manara
 python -m manara list
 python -m manara learn hashing
+python -m manara learn traffic
 python -m manara serve          # opens the browser lessons locally
 ```
 
@@ -62,7 +68,7 @@ Manara is the Arabic word for lighthouse, a guiding light that helps you find yo
 
 ## Honest scope
 
-Manara teaches fundamentals through faithful but simplified models. The SQL injection lesson runs a tiny simulated query evaluator, not a real database engine, and the crack time estimates assume the attacker knows the shape of the password, which is the safe way to think but not the only one. The lessons are a foundation, not a complete curriculum, and they are defensive throughout. Practice only on systems you own or are authorized to test.
+Manara teaches fundamentals through faithful but simplified models. The SQL injection lesson runs a tiny simulated query evaluator, not a real database engine. The crack time estimates assume the attacker knows the shape of the password, which is the safe way to think but not the only one. The certificate lesson checks validity, hostname, and issuer against a small trusted list, which is the core of what a browser does but not the whole of chain building and revocation. The traffic lesson reads a handful of connections to make the port scan pattern visible, where a real tool like NetHawk works over full captures. The lessons are a foundation, not a complete curriculum, and they are defensive throughout. Practice only on systems you own or are authorized to test.
 
 ## License
 
