@@ -56,7 +56,7 @@ class TestBruteforce(unittest.TestCase):
 
 class TestLessonsAndCli(unittest.TestCase):
     def test_every_lesson_has_text_and_takeaway(self):
-        self.assertGreaterEqual(len(LESSONS), 10)
+        self.assertGreaterEqual(len(LESSONS), 11)
         for lesson in LESSONS:
             self.assertTrue(lesson.explanation.strip())
             self.assertTrue(lesson.takeaway.strip())
