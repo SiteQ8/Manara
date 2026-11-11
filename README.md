@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🗼 Manara
+# Manara
 
 ### Learn cybersecurity by doing
 
